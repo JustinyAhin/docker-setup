@@ -1,16 +1,21 @@
 # -----------------------------------------------------------------------------
-# This Dockerfile.bun is specifically configured for projects using Bun
+# This Dockerfile is specifically configured for projects using npm
 # -----------------------------------------------------------------------------
 
-# Use Bun's official image
-FROM oven/bun:1 AS base
+# Use the official Node.js runtime as the base image
+FROM node:18-alpine AS base
 
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies with bun
-FROM base AS deps
-COPY package.json bun.lock* ./
-RUN bun install --no-save --frozen-lockfile
+# Install dependencies based on the preferred package manager
+COPY package.json package-lock.json* ./
+RUN \
+    if [ -f package-lock.json ]; then npm ci --only=production; \
+    else echo "Lockfile not found." && exit 1; \
+    fi
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -23,7 +28,7 @@ COPY . .
 # Uncomment the following line in case you want to disable telemetry during the build.
 # ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN bun run build
+RUN npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -41,6 +46,10 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 COPY --from=builder /app/public ./public
 
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
+
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -50,4 +59,8 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["bun", "./server.js"]
+ENV PORT=3000
+
+# server.js is created by next build from the standalone output
+# https://nextjs.org/docs/pages/api-reference/next-config-js/output
+CMD ["node", "server.js"]
