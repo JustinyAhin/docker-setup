@@ -1,5 +1,5 @@
 services:
-    next-app:
+    app-name:
         build:
             dockerfile: Dockerfile
         restart: always
