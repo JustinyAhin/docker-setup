@@ -1,44 +1,54 @@
+# -----------------------------------------------------------------------------
+# This Dockerfile.bun is specifically configured for projects using Bun
+# For npm/pnpm or yarn, refer to the Dockerfile instead
+# -----------------------------------------------------------------------------
+
+# Use Bun's official image
 FROM oven/bun:1 AS base
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lockb* ./
+# Install dependencies with bun
+FROM base AS deps
+COPY package.json bun.lock* ./
+RUN bun install --no-save --frozen-lockfile
 
-# Install dependencies
-RUN bun install --frozen-lockfile
-
-# Copy source code
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build the Next.js application
+# Next.js collects completely anonymous telemetry data about general usage.
+# Learn more here: https://nextjs.org/telemetry
+# Uncomment the following line in case you want to disable telemetry during the build.
+# ENV NEXT_TELEMETRY_DISABLED=1
+
 RUN bun run build
 
-# Production stage
-FROM oven/bun:1-slim AS production
-
+# Production image, copy all the files and run next
+FROM base AS runner
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lockb* ./
+# Uncomment the following line in case you want to disable telemetry during runtime.
+# ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install only production dependencies
-RUN bun install --frozen-lockfile --production
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME="0.0.0.0"
 
-# Copy built application from base stage
-COPY --from=base /app/.next/standalone ./
-COPY --from=base /app/.next/static ./.next/static
-COPY --from=base /app/public ./public
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
-# Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+COPY --from=builder /app/public ./public
+
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
 USER nextjs
 
 EXPOSE 3000
 
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["bun", "run", "server.js"]
+CMD ["bun", "./server.js"]

@@ -1,10 +1,9 @@
 services:
-    app-name:
+    next-app:
+        container_name: next-app
         build:
-            context: .
+            context: ./next-app
             dockerfile: Dockerfile
+        restart: always
         ports:
-            - "3000"
-        env_file:
-            - .env
-        restart: unless-stopped
+            - 3000:3000
