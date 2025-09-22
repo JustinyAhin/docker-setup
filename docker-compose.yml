@@ -1,8 +1,6 @@
 services:
     next-app:
-        container_name: next-app
         build:
-            context: ./next-app
             dockerfile: Dockerfile
         restart: always
         ports:
